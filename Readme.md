@@ -3,12 +3,15 @@ Atari Parallel Interface
 Transfer data via the Atari's joystick ports to/ from the modern world.
 
 ![](shot1.png)
-Tools- disk directory displayed with PicoDos, for your convenience...
+<i>Tools- disk directory displayed with PicoDos, for your convenience...</i>
 
 ![](shot2.png)
-The debugger tool, watch the bit's go by...
+
+<i>The debugger tool, watch the bit's go by...</i>
 
 ![](shot3.png)
-A minimalistic terminal program.
+
+<i>A minimalistic terminal program.</i>
+
 
 Schematic's will follow soon...
