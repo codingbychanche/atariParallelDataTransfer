@@ -1,0 +1,385 @@
+mads 1.9.3
+     1 				; Parallel Debuger
+     2 				;
+     3 				; Sends and receieves over/ from a parallel interface
+     4 				; connected to the two Joystick ports (Port A and Port B) of
+     5 				; an Atari 8- Bit computer.
+     6 				;
+     7 				; Testet with Atari 800 XL
+     8 				; A executable *.atr file will be created (a bootable disk image).
+     9 				; Simply rename the *xex file to *.atr....
+    10 				;
+    11 				; Usefull to debug your interface. Displays all the registers on screen.
+    12 				;
+    13 				; BF 2019
+    14 				;
+    15
+    16 				; Zeropage
+    17
+    18 = 00E0			ZP		equ $e0
+    19 = 00E2			zp2		equ $e2
+    20 = 00E4			zp3		equ $e4
+    21 = 00E6			zp4		equ $e6
+    22 = 00E8			zp5		equ	$e8
+    23 = 00EA			zp6		equ $ea
+    24 = 00EC			zp7		equ $ec
+    25 = 00EE			zp8		equ $ee
+    26
+    27 				; ANTIC
+    28
+    29 = 0230			DLPTR	EQU 560	
+    30 = 0200			VDLIST	EQU $200	 
+    31 = D40E			NMIEN	EQU $D40E
+    32 = D40A			WSYNC	EQU $D40A
+    33 = D40B			VCOUNT	EQU $D40B
+    34 = 0014			RTCLK	EQU $14
+    35 = 022F			SDMCTL	EQU 559
+    36
+    37 				; PIA
+    38
+    39 = D300			porta 	equ $d300 
+    40 = D302			pactl 	equ $d302	; When 48=> set Port A/B? as output 
+    41 = 0284			strig0	equ $284	; 0= High// 1= Low
+    42
+    43 = 0064			time_out_time	equ 100		; Aprox 2.5 sec's until timeout error and connection is terminated.
+    44
+    45 				; Keyboard
+    46
+    47 = D01F			CONSOL	EQU $d01f
+    48
+    49 				;
+    50 				; So let the show begin!
+    51 				;
+    52 					org $a800
+    53 					
+    54 				; Status of PortA and PortB is stored at $d300.
+    55 				; ----------------------------------------------
+    56 				;
+    57 				; 			PortA		   |Port B
+    58 				; $d300		001|002|004|008|016|032|064|128
+    59 				; Pin        1   2   3   4 | 1   2   3   4		
+    60 				;
+    61 				; Pin assignments
+    62 				; ---------------	
+    63 				; Data direction refers to: "6502 machine is sender/ other machine receieves"				
+    64 				;
+    65 				; Port A	Pin		
+    66 				;			1 - 4	Data				OUTPUT: Either Heigh (1) or Low (0)
+    67 				; Strig0	6		Acknoledge (ACK)	INPUT:	Low (0) means=> receiever: Last 4 bits processed, waiting for next....
+    68 				;
+    69 				; Port B	1		Ready (RDY)			OUTPUT: Heigh (1):I have set 4 Bits for Output, pls process, I'am waiting for ACK	
+    70 				;			2		End   (END)			OUTPUT: Height (1):All data send, terminate connection
+    71 				;			3		Direction (DR)		OUTPUT: Heigh (1): Receieve// Low (0): I'am the sender, pls listen.				
+    72
+    73 				;
+    74 				; Set up the screen
+    75 				;
+    76
+    77 				startagain
+    78 FFFF> A800-AD2E> A9 69		lda #<screen				; Antic PRG
+    79 A802 8D 30 02			sta DLPTR
+    80 A805 A9 A9			lda #>screen
+    81 A807 8D 31 02			sta DLPTR+1
+    82 					
+    83 A80A A9 8F			lda #<sending				; Print status
+    84 A80C 8D 7C A9			sta statusmsg
+    85 A80F A9 AC			lda #>sending
+    86 A811 8D 7D A9			sta statusmsg+1
+    87 					
+    88 A814 A9 67			lda #<empty					; No error so far.....
+    89 A816 8D 79 A9			sta errormsg
+    90 A819 A9 AC			lda #>empty
+    91 A81B 8D 7A A9			sta errormsg+1
+    92
+    93 				; Start of core routine	--------------------------------------------------
+    94 				; Open -------------------------------------------------------------------
+    95
+    96 				;
+    97 				; Init PIA
+    98 				;
+    99 A81E A9 30					lda #48				; Set Port A and B to output 
+   100 A820 8D 02 D3					sta pactl
+   101 A823 A9 00					lda #0				; All pins to low
+   102 A825 8D 00 D3					sta porta	
+   103 							
+   104 A828 A9 40					lda #64				; I will be sending data, please listen!
+   105 A82A 0D 00 D3					ora porta
+   106 A82D 8D 00 D3					sta porta
+   107 					
+   108 				; Put bytes ---------------------------------------------------------------
+   109 						
+   110 				; Bytes will be send low nibble first, high nibble second.
+   111 				;
+   112 A830 A2 00					ldx #0
+   113 							
+   114 A832			send1nibble						; Send first nibble
+   115 A832 AD 00 D3					LDA PORTA
+   116 A835 8D 57 A9					sta bytetoprint
+   117 A838 20 22 A9					jsr binout
+   118 							
+   119 A83B BD 59 A9					lda buffer,x
+   120 A83E 29 0F					and #15				; Cut low nibble
+   121 A840 0D 00 D3					ora porta
+   122 A843 8D 00 D3					sta porta
+   123 A846 A9 10					lda #16				; Ready. Please process
+   124 A848 0D 00 D3					ora porta
+   125 A84B 8D 00 D3					sta porta
+   126 A84E 8D 57 A9					sta bytetoprint
+   127 A851 20 22 A9					jsr binout
+   128 						
+   129 A854 A9 00					lda #0				; Init system timer...
+   130 A856 85 14					sta $14
+   131 							
+   132 A858			wait4ack
+   133 A858 A5 14					lda $14				; Check for timeout
+   134 A85A C9 64					cmp #time_out_time	; sec's to timeout.....
+   135 A85C D0 03					bne wwt1
+   136 A85E 4C F0 A8					jmp time_out_error
+   137 A861			wwt1
+   138 A861 AD 84 02					lda strig0			; Wait for acknowledge from reciever
+   139 A864 D0 F2					bne wait4ack		; If low (1) wait....
+   140 						
+   141 A866 A9 10					lda #16				; Erase ready status
+   142 A868 4D 00 D3					eor porta
+   143 A86B 8D 00 D3					sta porta
+   144 A86E 8D 57 A9					sta bytetoprint
+   145 A871 20 22 A9					jsr binout
+   146 							
+   147 A874 20 00 A9					jsr clearlow
+   148 						
+   149 A877 BD 59 A9					lda buffer,x
+   150 A87A 29 F0					and #240			; Cut high nibble
+   151 A87C 4A						lsr					; Shift high- to low nibble
+   152 A87D 4A						lsr
+   153 A87E 4A						lsr
+   154 A87F 4A						lsr
+   155 A880 0D 00 D3					ora porta
+   156 A883 8D 00 D3					sta porta
+   157 							
+   158 A886 A9 10					lda #16				; Ready. Please process high nibble
+   159 A888 0D 00 D3					ora porta
+   160 A88B 8D 00 D3					sta porta
+   161 A88E 8D 57 A9					sta bytetoprint
+   162 A891 20 22 A9					jsr binout
+   163 							
+   164 A894 A9 00					lda #0				; Init system timer...
+   165 A896 85 14					sta $14
+   166 A898			wait42ack
+   167 A898 A5 14					lda $14
+   168 A89A C9 64					cmp #time_out_time	; Timeout after x sec.....
+   169 A89C D0 03					bne wtt2
+   170 A89E 4C F0 A8					jmp time_out_error
+   171 A8A1			wtt2
+   172 A8A1 AD 84 02					lda strig0
+   173 A8A4 D0 F2					bne wait42ack
+   174 							
+   175 A8A6 20 00 A9					jsr clearlow
+   176 						
+   177 A8A9 E8						inx
+   178 A8AA E0 FF					cpx #255
+   179 A8AC F0 11					beq all_send
+   180 							
+   181 A8AE A9 10					lda #16				; Erase ready status
+   182 A8B0 4D 00 D3					eor porta			; TEST
+   183 A8B3 8D 00 D3					sta porta
+   184 A8B6 8D 57 A9					sta bytetoprint
+   185 A8B9 20 22 A9					jsr binout
+   186 							
+   187 A8BC 4C 32 A8					jmp send1nibble
+   188 A8BF			all_send
+   189 A8BF 20 D9 A8					jsr close
+   190 									
+   191 				; End of core routine ---------------------------------------------------------------
+   192
+   193 A8C2			st	
+   194 A8C2 A9 B7			lda #<pressstart
+   195 A8C4 8D 7C A9			sta statusmsg
+   196 A8C7 A9 AC			lda #>pressstart
+   197 A8C9 8D 7D A9			sta statusmsg+1
+   198
+   199 A8CC 20 0F A9			jsr wait
+   200 A8CF AD 1F D0			lda consol			; Now wait until the start key is pressed
+   201 A8D2 29 01			and #1
+   202 A8D4 D0 EC			bne st 
+   203 A8D6 4C 00 A8			jmp startagain
+   204
+   205 				;	
+   206 				; Close 
+   207 				;
+   208 						
+   209 A8D9			close
+   210 A8D9 A9 20			lda #32				; End of High (1). All data send, end connection.
+   211 A8DB 0D 00 D3			ora porta
+   212 A8DE 8D 00 D3			sta porta
+   213 							
+   214 A8E1 A9 10			lda #16				; Erase ready status. Receiever: Don't receieve!
+   215 A8E3 4D 00 D3			eor porta			
+   216 A8E6 8D 00 D3			sta porta
+   217 							
+   218 A8E9 8D 57 A9			sta bytetoprint
+   219 A8EC 20 22 A9			jsr binout
+   220 							
+   221 A8EF 60				rts
+   222 					
+   223 				;
+   224 				; Time out error
+   225 				;
+   226 				; Receiever did not send an ACK
+   227 				;
+   228
+   229 A8F0			time_out_error
+   230 A8F0 A9 07			lda #<time_out
+   231 A8F2 8D 79 A9			sta errormsg
+   232 A8F5 A9 AD			lda #>time_out
+   233 A8F7 8D 7A A9			sta errormsg+1
+   234 					
+   235 A8FA 20 D9 A8			jsr close
+   236 					
+   237 A8FD 4C C2 A8			jmp st
+   238 				;
+   239 				; Clear low nibble of Port A
+   240 				;
+   241
+   242 A900			clearlow
+   243 A900 AD 00 D3			lda porta			; Clear low nibble
+   244 A903 4A				lsr
+   245 A904 4A				lsr
+   246 A905 4A				lsr
+   247 A906 4A				lsr
+   248 A907 0A				asl
+   249 A908 0A				asl
+   250 A909 0A				asl
+   251 A90A 0A				asl	
+   252 A90B 8D 00 D3			sta porta
+   253 					
+   254 A90E 60				rts
+   255
+   256 				;
+   257 				; Wait
+   258 				;
+   259
+   260 A90F			wait
+   261 A90F 8A				txa
+   262 A910 48				pha
+   263 A911 98				tya
+   264 A912 48				pha
+   265 						
+   266 A913 A2 C8			ldx #200
+   267 A915			wloop1
+   268 A915 A0 C8			ldy #200
+   269 A917			wloop2
+   270 A917 88				dey
+   271 A918 D0 FD			bne wloop2
+   272 A91A CA				dex
+   273 A91B D0 F8			bne wloop1
+   274 					
+   275 A91D 68				pla
+   276 A91E A8				tay
+   277 A91F 68				pla
+   278 A920 AA				tax
+   279 					
+   280 A921 60				rts
+   281 				;
+   282 				; BinOut
+   283 				;
+   284 				; Prints 8-Bit number stored in accumulator to the screen
+   285 				; and shows contents of strig0 (ACK)
+   286 				;
+   287
+   288 A922			binout
+   289 A922 8A				txa
+   290 A923 48				pha
+   291 A924 98				tya
+   292 A925 48				pha
+   293 					
+   294 A926 A0 0E			ldy #14
+   295 A928 A2 08			ldx #8
+   296 					
+   297 A92A			loop
+   298 A92A 18				clc				; Send char...	
+   299 A92B AD 57 A9			lda bytetoprint
+   300 A92E 0A				asl				
+   301 A92F 8D 57 A9			sta bytetoprint
+   302 A932 A9 10			lda #"0"        ; If bit was not set print "0"
+   303 A934 69 00			adc #0	    	; add carry if set and print "1"
+   304 A936 99 86 AA			sta portabitmap,y		
+   305 A939 88				dey
+   306 A93A 88				dey
+   307 A93B CA				dex			
+   308 A93C D0 EC			bne loop		; Until all bits send
+   309
+   310 A93E AD 84 02			lda strig0
+   311 A941 C9 00			cmp #0
+   312 A943 D0 08			bne one
+   313 A945 A9 10			lda #"0"
+   314 A947 8D 9A AA			sta portabitmap+20
+   315 A94A 4C 52 A9			jmp notone
+   316 A94D			one
+   317 A94D A9 11			lda #"1"
+   318 A94F 8D 9A AA			sta portabitmap+20
+   319 A952			notone
+   320 A952 68				pla
+   321 A953 A8				tay
+   322 A954 68				pla
+   323 A955 AA				tax
+   324 					
+   325 A956 60				rts
+   326 					
+   327 A957			bytetoprint
+   328 A957 00				.byte	0
+   329
+   330 A958			bytetosend
+   331 A958 00				.byte 0
+   332
+   333 A959			buffer
+   334 A959 41 42 43 44 45		.byte 65,66,67,68,69
+   335 A95E 28 61 6C 6C 6F 00 + 	.byte "Hallo Welt",10
+   336 					
+   337 				;
+   338 				; Display list
+   339 				; 			
+   340
+   341 A969			screen						 	
+   342 A969 70				.byte 112					
+   343 A96A 46 82 A9			.byte $40+$06,a(screenram)
+   344 A96D 70				.byte 112
+   345 A96E 02 02 02 02 02 02 + :10	.byte $02
+   346 					
+   347 A978 42				.byte $40+$02
+   348 A979			errormsg
+   349 A979 00 00			.byte 0,0
+   350 					
+   351 A97B 42				.byte $40+$02
+   352 A97C			statusmsg
+   353 A97C 00 00			.byte 0,0
+   354 					
+   355 A97E 70				.byte 112
+   356 A97F 41 69 A9			.byte $41,a(screen)	
+   357 					
+   358 A982			screenram
+   359 A982 33 25 32 29 21 2C + 	.byte "SERIAL DEBUGGER V1.2"
+   360 A996 30 6F 72 74 00 21 + 	.byte "Port A !Port B      Strig0              "
+   361 A9BE 0E 0E 0E 0E 0E 0E + 	.byte ".......!................................"
+   362 A9E6 00 00 00 00 00 00 + 	.byte "       !R E D       A                   "
+   363 AA0E 24 61 74 61 00 00 + 	.byte "Data   !D N T       C                   "
+   364 AA36 11 00 12 00 13 00 + 	.byte "1 2 3 4!Y D R       K                   "
+   365 AA5E 0E 0E 0E 0E 0E 0E + 	.byte ".......!................................"
+   366 AA86			portabitmap	
+   367 AA86 00 00 00 00 00 00 + 	.byte "                                        "
+   368 AAAE 00 00 00 00 00 00 + 	.byte "                                        "
+   369 AAD6 00 00 00 00 00 00 + :400 .byte 0
+   370
+   371 AC66			end
+   372 AC66 00				.byte 0	
+   373 					
+   374 				; Status and error messages
+   375 AC67			empty
+   376 AC67 0D 0D 0D 0D 0D 0D + 	.byte "----------------------------------------"
+   377 AC8F			sending
+   378 AC8F 33 65 6E 64 69 6E + 	.byte "Sending............                     "
+   379 ACB7			pressstart
+   380 ACB7 30 72 65 73 73 00 + 	.byte "Press <START> to send again....         "
+   381 ACDF			sucess
+   382 ACDF 21 6C 6C 00 64 61 + 	.byte "All data send, no error's               "
+   383 AD07			time_out
+   384 AD07 34 69 6D 65 00 6F + 	.byte "Time out error, check connection!       "
