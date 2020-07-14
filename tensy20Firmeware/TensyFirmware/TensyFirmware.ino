@@ -1,6 +1,9 @@
 /*
  * Receiever
- *
+ * 
+ * This version does only receive data from the Atari.
+ * 
+ * BF 7/2020
  * 
  */
 
@@ -12,13 +15,13 @@ String receieved_data;
 // Pin assigements for parallel interface
 //
 // Output
-int const ACKNOWLEDGE=PIN_B0; // Set to 'High' when nibble is processed. Ready to receieve next nibble
+int const ACKNOWLEDGE=PIN_B7; // Set to 'High' when nibble is processed. Ready to receieve next nibble
 
 // Input
-int const IN_BIT_1=PIN_B1;    // Pin 1-4 of Port A when 1=0// when 0=1!
-int const IN_BIT_2=PIN_B2;    // These 4 pins are either the low- or high- nibble of the byte currently send
-int const IN_BIT_3=PIN_B3;
-int const IN_BIT_4=PIN_B7;
+int const IN_BIT_1=PIN_B0;    // Pin 1-4 of Port A when 1=0// when 0=1!
+int const IN_BIT_2=PIN_B1;    // These 4 pins are either the low- or high- nibble of the byte currently send
+int const IN_BIT_3=PIN_B2;
+int const IN_BIT_4=PIN_B3;
 
 int const RDY_PIN=PIN_D0;     // 'High' when nibble is ready to process
 int const END_PIN=PIN_D1;     // 'High' means=> receiever has all data send.  
@@ -133,7 +136,7 @@ void loop() {
         //Serial.println(receieved_byte);
        
         
-        BT.print(receieved_byte);
+        BT.write(receieved_byte);
        
 
         receieved_nibble=0;

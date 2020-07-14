@@ -57,7 +57,7 @@ send
 	stx bytes_send
 get_next_byte
 	lda inputbuffer,x
-	cmp #$9b
+	cmp #$9b				; CR?
 	beq send_sucessfully
 	sta byte_to_send
 	jsr send_byte
