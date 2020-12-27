@@ -159,7 +159,7 @@ statusmsg
 ;
 	
 screenram
-	.byte "SERIAL DEBUGGER V1.3"
+	.byte "SERIAL DEBUGGER V1.4"
 	.byte "Port A !Port B      Strig0              "
 	.byte ".......!................................"
 	.byte "       !R E D       A                   "
