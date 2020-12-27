@@ -120,7 +120,7 @@ send1nibble				; Send first nibble
 	ora porta
 	sta porta
 	sta bytetoprint
-	;jsr binout
+	jsr binout
 		
 	lda #0				; Init system timer...
 	sta $14
@@ -138,7 +138,7 @@ wwt1
 	eor porta
 	sta porta
 	sta bytetoprint
-	;jsr binout
+	jsr binout
 			
 	jsr clearlow
 		
@@ -155,7 +155,7 @@ wwt1
 	ora porta
 	sta porta
 	sta bytetoprint
-	;jsr binout
+	jsr binout
 			
 	lda #0				; Init system timer...
 	sta $14
@@ -174,7 +174,7 @@ wtt2
 	eor porta			
 	sta porta
 	sta bytetoprint
-	;jsr binout
+	jsr binout
 
 	pla
 	tay

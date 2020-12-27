@@ -26,6 +26,12 @@ start
 	sta DLPTR+1
 	
 endless
+	lda 84			; TEST, SET CURSOR TO A CERTAIN LINE....
+	cmp #18
+	bcc g
+	lda #0
+	sta 84	
+g
 	lda #<inputbuffer
 	ldy #>inputbuffer
 	jsr get					; Get string
@@ -229,7 +235,7 @@ get
 null
 	.byte ' ',$9b
 titel
-	.byte "MINI TERM V1.0 BF                       "
+	.byte "MINI TERM V1.3 BF                       "
 
 status
 	.byte "Bytes send 0000 // Bytes received 0000  "
