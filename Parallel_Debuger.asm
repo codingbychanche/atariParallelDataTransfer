@@ -45,10 +45,9 @@ startagain
 ;
 
 	jsr open			 ; Open comm channel
-
 	ldx #0
-send
-	lda buffer,x
+send	
+	lda buffer,x		; Send..
 	sta byte_to_send
 	jsr send_byte
 	bcs time_out
@@ -159,7 +158,7 @@ statusmsg
 ;
 	
 screenram
-	.byte "SERIAL DEBUGGER V1.4"
+	.byte "SERIAL DEBUGGER V1.5"
 	.byte "Port A !Port B      Strig0              "
 	.byte ".......!................................"
 	.byte "       !R E D       A                   "
@@ -177,9 +176,9 @@ portabitmap
 empty
 	.byte "----------------------------------------"
 sending
-	.byte "Sending............                     "
+	.byte "Press <START> key to send               "
 pressstart
-	.byte "Press <START> to send again....         "
+	.byte "Press <START> for next session          "
 sucess
 	.byte "All data send, no error's               "
 time_out_text

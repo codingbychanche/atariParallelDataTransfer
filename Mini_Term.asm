@@ -235,7 +235,7 @@ get
 null
 	.byte ' ',$9b
 titel
-	.byte "MINI TERM V1.4 BF                       "
+	.byte "MINI TERM V1.5 BF                       "
 
 status
 	.byte "Bytes send 0000 // Bytes received 0000  "
