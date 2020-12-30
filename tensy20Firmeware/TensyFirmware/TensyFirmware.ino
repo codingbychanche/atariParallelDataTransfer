@@ -9,8 +9,10 @@
 
 // HC05 BT- Module
 #include <SoftwareSerial.h>
+#define INPUT_BUFFER_SIZE 1024
+int currentInputBufferSize;
+
 SoftwareSerial BT(7,8); 
-String receieved_data;
 
 // Pin assigements for parallel interface
 //
@@ -26,13 +28,6 @@ int const ACKNOWLEDGE=PIN_B7; // OUTPUT: Set to 'High' when nibble is processed.
 int const END_PIN=PIN_D1;     // 'High' means=> receiever has all data send.  
 int const DTR_PIN=PIN_C6;     // 'High' means: Recievie data! 
 
-// PIN_D2=RXD Serial receieve
-// PIN D3=TXT Serial transmit
-
-
-// Var's
-//
-// Input
 int pinState_1;               // Bits 1 to 4 of the receieved nibble....
 int pinState_2;
 int pinState_3;
@@ -81,6 +76,7 @@ void setup() {
 
   pinMode(END_PIN,INPUT_PULLUP);
   
+  
   pinMode(RDY_PIN,INPUT_PULLUP);
   pinMode(DTR_PIN,INPUT_PULLUP);
 
@@ -92,17 +88,15 @@ void setup() {
  * Main loop
  */
 void loop() {
-
-  //Serial.println("Waiting for input channel to open.....");
-
-  //rdy_state=LOW;
-  //rdy_last_state=LOW;
-  end_state=digitalRead(END_PIN);
   
-  // Receieve, until end state is low....
-  //if (end_state==HIGH && end_last_state==LOW){ // Check if connection was openend, check for rising edge..
+  // Clear input buffer
+  char inputBuffer [INPUT_BUFFER_SIZE];
+  currentInputBufferSize=0;
+  
+  //Serial.println("Connection closed");
+  while (digitalRead(END_PIN)==LOW){ // Check if connection was openend
 
-    // Serial.println("Connection opened.... Waiting for rdy....");
+    //Serial.println("Connection opened.... Waiting for rdy....");
     
     rdy_state=digitalRead(RDY_PIN);
     //dtr_state=digitalRead(DTR_PIN);
@@ -138,7 +132,7 @@ void loop() {
         // Tell sender, ok, we have receieved. Send next nibble!
         digitalWrite(ACKNOWLEDGE,LOW);
 
-        Serial.println("nibble 1");
+        //Serial.println("nibble 1");
         
       } else {
        
@@ -146,21 +140,27 @@ void loop() {
         receieved_nibble=receieved_nibble << 4;
         receieved_byte=receieved_byte | receieved_nibble;
 
-        // Show result
-        //Serial.println(receieved_byte);
-       
-        BT.write(receieved_byte);
+        inputBuffer[currentInputBufferSize]=receieved_byte;
+        if (currentInputBufferSize<INPUT_BUFFER_SIZE) currentInputBufferSize++;
        
         receieved_nibble=0;
         receieved_byte=0;
 
         // Tell sender, ok, we have receieved. Send next nibble!
         digitalWrite(ACKNOWLEDGE,LOW);
-
-        Serial.println("Nibble 2");
+        //Serial.println("Nibble 2");
       }
-    } // Wait for rising edge, sender tells: Get new nibble...
+    } // Wait for rising edge, sender tells: Get new nibble..
+    
     rdy_last_state=rdy_state; 
-  //} // Check if connection is closed...
-  end_last_state=end_state;
+     
+  } // Check if connection is closed...
+  
+  digitalWrite(ACKNOWLEDGE,HIGH); // Connection was clesed, do not send anything....
+  
+  // Send receieved buffer contents via bluetooth, if received anything...
+  if (currentInputBufferSize>0){
+    inputBuffer[currentInputBufferSize++]='\0';
+    BT.write(inputBuffer);
+  }
 }
