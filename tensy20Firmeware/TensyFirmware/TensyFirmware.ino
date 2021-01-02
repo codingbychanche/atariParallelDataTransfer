@@ -76,7 +76,6 @@ void setup() {
 
   pinMode(END_PIN,INPUT_PULLUP);
   
-  
   pinMode(RDY_PIN,INPUT_PULLUP);
   pinMode(DTR_PIN,INPUT_PULLUP);
 
@@ -91,11 +90,11 @@ void loop() {
   
   // Clear input buffer
   char inputBuffer [INPUT_BUFFER_SIZE];
-  currentInputBufferSize=0;
+    currentInputBufferSize=0;
   
   //Serial.println("Connection closed");
   while (digitalRead(END_PIN)==LOW){ // Check if connection was openend
-
+  
     //Serial.println("Connection opened.... Waiting for rdy....");
     
     rdy_state=digitalRead(RDY_PIN);
@@ -159,8 +158,9 @@ void loop() {
   digitalWrite(ACKNOWLEDGE,HIGH); // Connection was clesed, do not send anything....
   
   // Send receieved buffer contents via bluetooth, if received anything...
+ 
   if (currentInputBufferSize>0){
-    inputBuffer[currentInputBufferSize++]='\0';
+    inputBuffer[currentInputBufferSize]='\0';
     BT.write(inputBuffer);
   }
 }

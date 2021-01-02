@@ -176,10 +176,10 @@ wtt2
 	sta bytetoprint
 	;jsr binout
 
-	pla
 	tay
 	pla
 	tax
+	pla
 	
 	clc
 	rts

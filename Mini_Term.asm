@@ -10,24 +10,24 @@
 ;
 	org $a800
 
-start
-	lda #<screen
-	sta 88
-	lda #>screen
-	sta 89
-	
-	lda #<null		; Show cursor
-	ldy #>null
-	jsr print
-	
 	lda #<dlist		; Antic PRG
 	sta DLPTR
 	lda #>dlist
 	sta DLPTR+1
 	
+start
+	lda #<commandline
+	sta 88
+	lda #>commandline
+	sta 89
+	
+	lda #0
+	sta 85
+	sta 85
+	
 endless
-	lda 84			; TEST, SET CURSOR TO A CERTAIN LINE....
-	cmp #18
+	lda 84			; After one line was entered, set cursor
+	cmp #0			; back to first line.
 	bcc g
 	lda #0
 	sta 84	
@@ -39,12 +39,42 @@ g
 	cmp #'!'
 	beq command
 noCommand
+	jsr clearCommandline
+	jsr clearStatus
 	jsr print_sending
 	jsr send				; Send string
 	jmp endless				; Get next string.....
 command
+	jsr clearCommandLine
 	jsr evaluateCommand		; Eval and execute command...
-	jmp endless
+	jmp endless	
+;
+; Copys the text just entered into
+; the output buffer....Clears the command line....
+;
+clearCommandLine
+	ldx #0
+cl	
+	lda inputbuffer,x
+	sta echoOfCommand,x
+	lda #0
+	sta commandline,x
+	inx
+	cpx #39
+	bne cl
+	rts
+	
+;
+; Clears status line
+;
+clearStatus
+	ldx #120
+	lda #0
+cl1
+	sta status,x
+	dex
+	bne cl1
+	rts
 ;
 ; Send
 ;
@@ -63,18 +93,20 @@ send
 	stx bytes_send
 get_next_byte
 	lda inputbuffer,x
-	cmp #$9b				; CR?
-	beq send_sucessfully
 	sta byte_to_send
 	jsr send_byte
 	bcs time_out_occured
 	ldx bytes_send
 	inx
 	stx bytes_send
+	
+	lda inputbuffer,x
+	cmp #$9b				; CR?
+	beq send_sucessfully
+	
 	jmp get_next_byte
 	
 send_sucessfully
-	stx bytes_send
 	jsr close
 	lda bytes_send
 	bne data_was_send
@@ -103,6 +135,14 @@ time_out_occured
 	jmp return
 	
 return
+
+	ldx #255					; Clear inbuffer
+	lda #0
+cl2
+	sta inbuffer,x
+	dex
+	bne cl2
+	
 	pla
 	tay
 	pla
@@ -126,41 +166,67 @@ evaluateCommand
 	tax	
 	
 	rts
-
 ;
-; Print various messages...
+; Print various status messages
+; inside the status line
 ;
 
 print_sending
+	lda #<status
+	sta 88
+	lda #>status
+	sta 89
 	lda #<text_sending
 	ldy #>text_sending
 	jsr print
-	rts
+	jmp out
 	
 print_time_out_error
+	lda #<status
+	sta 88
+	lda #>status
+	sta 89
 	lda #<text_time_out_err
 	ldy #>text_time_out_err
 	jsr print
-	rts
+	jmp out
 	
 print_success
+	lda #<status
+	sta 88
+	lda #>status
+	sta 89
 	lda #<text_success
 	ldy #>text_success
 	jsr print
-	rts
+	jmp out
 	
 print_no_input
+	lda #<status
+	sta 88
+	lda #>status
+	sta 89
 	lda #<text_no_input
 	ldy #>text_no_input
 	jsr print
-	rts
+	jmp out
 	
 print_help
+	lda #<status
+	sta 88
+	lda #>status
+	sta 89
 	lda #<text_help
 	ldy #>text_help
 	jsr print
-	rts
+	jmp out
+out
+	lda #<commandline
+	sta 88
+	lda #>commandline
+	sta 89
 	
+	rts
 ;
 ; Converts float value in 'fro' to ascii
 ; Result is written to adress stored in 'zp' ($eo)
@@ -233,23 +299,36 @@ get
 ;
 
 null
-	.byte ' ',$9b
-titel
-	.byte "MINI TERM V1.5 BF                       "
+	.byte ' ',$9B
 
+titel
+	.byte "MINI TERM V1.8 BF                       "
+	
+statusTitel
+	.byte "STATUS:                                 "
+	
+commandLineTitel
+	.byte "SHELL:                                  "
 status
-	.byte "Bytes send 0000 // Bytes received 0000  "
+:160 .byte 
+
 text_sending
-	.byte '>> Sending .......',$9b
+	.byte 'Sending:'	
+echoOfCommand
+:40	.byte 0
+	.byte $9b
+	
+inBufferTitel
+	.byte "BUFFER:                                 "	
+	
 text_time_out_err
-	.byte '   Time out error!                      ',$9b
+	.byte 'Time out error!                         ',$9b
 text_success
-	.byte '   Bytes send successfully:             ',$9b
+	.byte 'Bytes send successfully:                ',$9b
 text_no_input
-	.byte '   No input, nothing send.....          ',$9b
+	.byte 'No input, nothing send.....             ',$9b
 text_help
 	.byte 'Type: !<help/dir/save/load>.            ',$9b
-
 
 inputbuffer
 :255	.byte 0
@@ -261,14 +340,24 @@ dlist
 	.byte 112,112				
 	.byte $40+$02,a(titel)
 	.byte 0
-	.byte $40+$02,a(status)
+	.byte $40+$02,a(statusTitel)
 	.byte 0
-	.byte $40+$02,a(screen)
-:23	.byte $02
-	
+	.byte $40+$02,a(status)
+	.byte $02,$02
+	.byte 0
+	.byte $40+$02,a(inBufferTitel)
+	.byte 0
+	.byte $40+$02,a(inBuffer)
+:16	.byte $02
+	.byte 0
+	.byte $40+$02,a(commandLineTitel)
+	.byte 0
+	.byte $40+$02,a(commandline)
 	.byte 112
 	.byte $41,a(dlist)	
 	
-screen
+commandline
+:120	.byte
+inBuffer
 :2000	.byte
 	
