@@ -5,6 +5,12 @@
 ; BF 2019
 
 	icl 'Atari_Systext_Equates.asm'
+	
+lf	equ $9b		; Linefeed
+
+
+
+
 ;
 ; Main........
 ;
@@ -16,18 +22,19 @@
 	sta DLPTR+1
 	
 start
-	lda #<commandline
+	lda #<commandline	; Keyboard input takes place in the command line
 	sta 88
 	lda #>commandline
 	sta 89
 	
-	lda #0
-	sta 85
-	sta 85
-	
+	lda #0				; Set cursor to row / column 0
+	sta 82				; Right column.
+	sta 84				; Set cursor to row 0
+	jsr print_lf		; Print lf to enable the changes made above....
+
 endless
-	lda 84			; After one line was entered, set cursor
-	cmp #0			; back to first line.
+	lda 84				; After one line was entered, set cursor
+	cmp #0				; back to first line.
 	bcc g
 	lda #0
 	sta 84	
@@ -63,7 +70,6 @@ cl
 	cpx #39
 	bne cl
 	rts
-	
 ;
 ; Clears status line
 ;
@@ -101,7 +107,7 @@ get_next_byte
 	stx bytes_send
 	
 	lda inputbuffer,x
-	cmp #$9b				; CR?
+	cmp #lf				; CR?
 	beq send_sucessfully
 	
 	jmp get_next_byte
@@ -135,7 +141,6 @@ time_out_occured
 	jmp return
 	
 return
-
 	ldx #255					; Clear inbuffer
 	lda #0
 cl2
@@ -148,7 +153,6 @@ cl2
 	pla
 	tax	
 	rts
-	
 ;
 ; User did input a command, evaluate..
 ;
@@ -170,12 +174,20 @@ evaluateCommand
 ; Print various status messages
 ; inside the status line
 ;
+print_lf
+	lda #<null
+	ldy #>null
+	jsr print
+	jmp out
+	
 
 print_sending
 	lda #<status
 	sta 88
 	lda #>status
 	sta 89
+	lda #0
+	sta 84
 	lda #<text_sending
 	ldy #>text_sending
 	jsr print
@@ -186,6 +198,8 @@ print_time_out_error
 	sta 88
 	lda #>status
 	sta 89
+	lda #0
+	sta 84
 	lda #<text_time_out_err
 	ldy #>text_time_out_err
 	jsr print
@@ -196,6 +210,8 @@ print_success
 	sta 88
 	lda #>status
 	sta 89
+	lda #0
+	sta 84
 	lda #<text_success
 	ldy #>text_success
 	jsr print
@@ -216,6 +232,8 @@ print_help
 	sta 88
 	lda #>status
 	sta 89
+	lda #0
+	sta 84
 	lda #<text_help
 	ldy #>text_help
 	jsr print
@@ -299,10 +317,10 @@ get
 ;
 
 null
-	.byte ' ',$9B
+	.byte ' ',lf
 
 titel
-	.byte "MINI TERM V1.8 BF                       "
+	.byte "MINI TERM V1.85 BF                      "
 	
 statusTitel
 	.byte "STATUS:                                 "
@@ -316,19 +334,19 @@ text_sending
 	.byte 'Sending:'	
 echoOfCommand
 :40	.byte 0
-	.byte $9b
+	.byte 0
 	
 inBufferTitel
 	.byte "BUFFER:                                 "	
 	
 text_time_out_err
-	.byte 'Time out error!                         ',$9b
+	.byte 'Time out error!                         ',lf
 text_success
-	.byte 'Bytes send successfully:                ',$9b
+	.byte 'Bytes send successfully:                ',lf
 text_no_input
-	.byte 'No input, nothing send.....             ',$9b
+	.byte 'No input, nothing send.....             ',lf
 text_help
-	.byte 'Type: !<help/dir/save/load>.            ',$9b
+	.byte 'Type: !<help/dir/save/load>.            ',lf
 
 inputbuffer
 :255	.byte 0
@@ -359,5 +377,5 @@ dlist
 commandline
 :120	.byte
 inBuffer
-:2000	.byte
+:8000	.byte
 	
