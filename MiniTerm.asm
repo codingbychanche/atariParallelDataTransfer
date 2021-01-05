@@ -8,13 +8,10 @@
 	
 lf	equ $9b		; Linefeed
 
-
-
-
 ;
 ; Main........
 ;
-	org $a800
+	org $3360		; Just after DUP- Sys....
 
 	lda #<dlist		; Antic PRG
 	sta DLPTR
@@ -107,7 +104,7 @@ get_next_byte
 	stx bytes_send
 	
 	lda inputbuffer,x
-	cmp #lf				; CR?
+	cmp #lf			
 	beq send_sucessfully
 	
 	jmp get_next_byte
@@ -162,7 +159,8 @@ evaluateCommand
 	tya
 	pha
 	
-	jsr print_help	; Test....
+	;jsr print_help	; Test....
+	jsr readDir
 
 	pla
 	tay
@@ -180,7 +178,6 @@ print_lf
 	jsr print
 	jmp out
 	
-
 print_sending
 	lda #<status
 	sta 88
@@ -238,6 +235,39 @@ print_help
 	ldy #>text_help
 	jsr print
 	jmp out
+	
+print_dir
+	lda #<inBuffer
+	sta 88
+	lda #>inBuffer
+	sta 89
+	
+	lda #<dir
+	ldy #>dir
+	jsr print
+	jmp out
+	
+print_cio_error			
+	sty fro1				; Cio error- code
+	lda #0
+	sta fro2
+	lda #<(text_cio_error+10)
+	sta zp
+	lda #>(text_cio_error+10)
+	sta zp+1
+	jsr toascii
+
+	lda #<status		
+	sta 88
+	lda #>status
+	sta 89
+	lda #0
+	sta 84
+	
+	lda #<text_cio_error
+	ldy #>text_cio_error
+	jsr print
+	jmp out
 out
 	lda #<commandline
 	sta 88
@@ -264,8 +294,7 @@ done
  	clc                            
  	sbc #127     
   	sta (zp),y
-  	rts
-  	 	
+  	rts	
 ;
 ; Prints a string
 ;
@@ -285,7 +314,7 @@ print
   	sta iccom,x
   	jsr ciov        ; call cio
   	rts
-  
+;  
 ; Get String (input)
 ; 
 ; String adr. low A
@@ -305,13 +334,53 @@ get
   	sta iccom,x
   	jsr ciov     
   	rts
-  
+;
+; Read disk directory
+;
+readDir
+	ldx #$20      	; iocb # x 16 => $20=32=#2 Same as Open #,x,x,"..."
+	lda #<device
+  	sta icbal,x   
+  	lda #>device
+  	sta icbah,x   
+  	lda #3			; Open
+  	sta iccom,x
+  	lda #6			; Read dir
+  	sta icax1,x
+  	jsr ciov   
+  	bmi cioError
+  	
+  	lda #<dir		; Buffer for dir- file
+  	sta icbal,x   
+  	lda #>dir
+  	sta icbah,x  
+l1
+  	ldx #$20	
+  	lda #255		; Max size of dir file....
+  	sta icball,x
+  	lda #3
+  	sta icbalh,x
+	lda #5			; Get record
+  	sta iccom,x
+  	jsr ciov   
+  	bmi dirRead
+  	jsr print_dir
+  	jmp l1			; Read until all enries read....
+  	
+dirRead
+ 	rts
+ 	
+cioError
+ 	jsr print_cio_error
+ 	rts
+ 	;;; Close!!!!!!!!!!!!
+
+device
+ 	.byte 'D1:*.*'
 ;
 ; Firmware
 ;
-
-	icl 'Parallel_Interface_Firmware.asm'
-	
+	icl 'Parallel_Interface_Firmware.asm'	
 ;
 ; Data
 ;
@@ -347,6 +416,10 @@ text_no_input
 	.byte 'No input, nothing send.....             ',lf
 text_help
 	.byte 'Type: !<help/dir/save/load>.            ',lf
+	
+text_cio_error
+	.byte 'CIO Error:'
+	.byte '                              ',lf
 
 inputbuffer
 :255	.byte 0
@@ -365,6 +438,7 @@ dlist
 	.byte 0
 	.byte $40+$02,a(inBufferTitel)
 	.byte 0
+inbufferAdr
 	.byte $40+$02,a(inBuffer)
 :16	.byte $02
 	.byte 0
@@ -376,6 +450,10 @@ dlist
 	
 commandline
 :120	.byte
+
+dir
+:768	.byte
+
 inBuffer
-:8000	.byte
+:8000	.byte 
 	

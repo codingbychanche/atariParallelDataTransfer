@@ -7,6 +7,10 @@
 ; ----------------------------------------------
 ;
 ; 			PortA		   |Port B
+;						   |
+;				Data	   | R	 A	 D
+;				     	   | D	 C	 T
+;						   | Y	 K	 R
 ; $d300		001|002|004|008|016|032|064|128
 ; Pin        1   2   3   4 | 1   2   3   4		
 ;
@@ -15,12 +19,12 @@
 ; Data direction refers to: "6502 machine is sender/ other machine receieves"				
 ;
 ; Port A	Pin		Bit
-;			1 - 4	1 - 4		Data				OUTPUT: Either Heigh (1) or Low (0)
-; Strig0	6		-			Acknoledge (ACK)	INPUT:	Low (0) means=> receiever: Last 4 bits processed, waiting for next....
+;			1 - 4	1 - 4		Data				OUTPUT: Either high (1) or Low (0)
+; Strig0	6		-			Acknoledge (ACK)	INPUT:	Low (0) means=> Receiver has processed last nibble, pls send next nibble.
 ;
-; Port B	1		16			Ready (RDY)			OUTPUT: Heigh (1):I have set 4 Bits for Output, pls process, I'am waiting for ACK	
-;			2		32			End   (END)			OUTPUT: Height (1):All data send, terminate connection
-;			3		64			Direction (DR)		OUTPUT: Heigh (1): Receieve// Low (0): I'am the sender, pls listen.	Not used yet
+; Port B	1		16			Ready (RDY)			OUTPUT: high (1):I have set 4 Bits for Output, pls process, I'am waiting for ACK	
+;			2		32			End   (END)			OUTPUT: hight (1):All data send, terminate connection.
+;			3		64			Direction (DTR)		OUTPUT: high (1): Receieve// Low (0): I'am the sender, pls listen.	Not used yet
 
 
 ;

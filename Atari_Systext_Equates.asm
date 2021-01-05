@@ -41,6 +41,7 @@ IFP 	EQU $D9AA
 ; CIO
 
 ICCOM 	EQU $342      	; Comand
+ICSTA	EQU $343		; Status after returning from CIOV
 ICBAL 	EQU $344      	; Buffer adr. low
 ICBAH 	EQU $345      	; Buffer adr. high
 ICBALL 	EQU $348      	; Buffer size low
