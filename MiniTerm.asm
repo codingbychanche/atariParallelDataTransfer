@@ -29,6 +29,15 @@ start
 	sta 84				; Set cursor to row 0
 	jsr print_lf		; Print lf to enable the changes made above....
 
+	lda #<inbuffer		; Zeropageregister holds
+	sta zp8				; address of the buffer
+	lda #>inbuffer
+	sta zp8+1
+	lda #0			
+	sta lines
+;
+; Handle user input inside the command line
+;
 endless
 	lda 84				; After one line was entered, set cursor
 	cmp #0				; back to first line.
@@ -54,7 +63,7 @@ command
 	jmp endless	
 ;
 ; Copys the text just entered into
-; the output buffer....Clears the command line....
+; the status line....Clears the command line....
 ;
 clearCommandLine
 	ldx #0
@@ -71,7 +80,7 @@ cl
 ; Clears status line
 ;
 clearStatus
-	ldx #120
+	ldx #80
 	lda #0
 cl1
 	sta status,x
@@ -79,9 +88,89 @@ cl1
 	bne cl1
 	rts
 ;
-; Send
+; Add a line to the in- buffer
 ;
+; Result: ZP8 points to last empty line in
+; the in- buffer. Number of lines is increased.
+;
+; Every routine writing to the in- buffer must
+; call this subroutine after the last linefeed ($9b) charakter
+; receieved.
+;
+lines	.word 0
 
+addLine
+	txa
+	pha
+	tya
+	pha
+	
+	clc
+	lda zp8
+	adc#40
+	sta zp8
+	lda zp8+1
+	adc#0
+	sta zp8+1
+	
+	clc
+	lda lines
+	adc #1
+	sta lines
+	lda lines+1
+	adc #0
+	sta lines+1
+
+	lda lines			; More lines? if so, scroll
+	cmp #10				; screen up by one line....
+	bcs greater
+	jmp ot	
+greater
+	clc
+	lda inBufferAdr	
+	adc #40
+	sta inBufferAdr
+	lda inBufferAdr+1
+	adc #0
+	sta inBufferAdr+1
+ot
+	pla
+	tay
+	pla
+	tax	
+	
+	rts
+;
+; Clear inputbuffer
+;
+clearInBuffer
+	txa
+	txa
+	pha
+	tya
+	pha
+	
+	lda #<inBuffer			
+	sta zp7
+	sta zp8
+	sta inBufferAdr
+	lda #>inBuffer
+	sta zp7+1
+	sta zp8+1
+	sta inBufferAdr+1
+		
+	pla
+	tay
+	pla
+	tax	
+	
+	rts
+;
+; Send
+; Sends the contents of the inputbuffer (the line entered
+; inside the commandline) via
+; porta/portb to the connected hardware
+;
 bytes_send
 	.byte 0
 
@@ -135,23 +224,16 @@ data_was_send
 time_out_occured
 	jsr close
 	jsr print_time_out_error
-	jmp return
+	jmp return	
 	
 return
-	ldx #255					; Clear inbuffer
-	lda #0
-cl2
-	sta inbuffer,x
-	dex
-	bne cl2
-	
 	pla
 	tay
 	pla
 	tax	
 	rts
 ;
-; User did input a command, evaluate..
+; User did input a command, evaluate!!
 ;
 evaluateCommand
 	txa
@@ -159,15 +241,142 @@ evaluateCommand
 	tya
 	pha
 	
-	;jsr print_help	; Test....
+	lda inputBuffer+1
+	
+	cmp #'D'
+	bne notDir
 	jsr readDir
-
+	jmp o
+notDir
+	cmp #'C'
+	bne noComm
+	jsr clearInBuffer
+	jsr print_input_buffer_empty
+	jmp o
+noComm
+	jsr print_help
+o
 	pla
 	tay
 	pla
 	tax	
 	
 	rts
+;
+; Converts float value in 'fro' to ascii
+; Result is written to adress stored in 'zp' ($eo)
+;
+toascii
+	jsr ifp				; Value in 'fro1' and 'fro2' from integer to float
+	jsr fasc			; Float to integer
+	
+	ldy #0		
+num
+  	lda (INBUFF),Y		; Inbuff points to ascii value...
+  	bmi done    		; Copy ascii value to adress 'zp' points to
+  	sta (zp),y
+  	iny
+  	bne num
+done     
+ 	clc                            
+ 	sbc #127     
+  	sta (zp),y
+  	rts	
+;
+; Prints a string
+;
+; String adr. low A
+; String adr. high Y
+;
+print 
+	ldx #0      	; iocb #0
+  	sta icbal,x   
+  	tya           
+  	sta icbah,x   
+  	lda #80       
+  	sta icball,x
+  	lda #0
+  	sta icbalh,x  
+  	lda #9          ; comand 'put text'
+  	sta iccom,x
+  	jsr ciov        ; call cio
+  	rts
+;  
+; Get String (input)
+; 
+; String adr. low A
+; String adr. high Y
+; 
+get 
+	ldx #0      	; iocb #0 
+  	sta icbal,x   
+  	tya           
+  	sta icbah,x   
+  	lda #255      
+  	sta icball,x
+  	lda #0
+  	sta icbalh,x  
+  	lda #4       
+  	sta iccom,x
+  	jsr ciov     
+  	rts
+;
+; Read disk directory into the input- buffer
+;
+readDir
+	ldx #$20      	; iocb # x 16 => $20=32=#2 Same as Open #,x,x,"..."
+	lda #<device
+  	sta icbal,x   
+  	lda #>device
+  	sta icbah,x   
+  	lda #3			; Open
+  	sta iccom,x
+  	lda #6			; Read dir
+  	sta icax1,x
+  	jsr ciov   
+  	bmi cioError
+  	
+  	lda #<dir		; Buffer for dir- file
+  	sta icbal,x   
+  	lda #>dir
+  	sta icbah,x  
+l1
+  	ldx #$20	
+  	lda #255		; Max size of dir file....
+  	sta icball,x	; 64 x  (8+3) bytes per. dir entry..
+  	lda #3
+  	sta icbalh,x
+	lda #5			; Get record
+  	sta iccom,x
+  	jsr ciov   
+  	bmi dirRead
+  	jsr print_dir	; Write line just read into the in- buffer
+	jsr addLine
+  	jmp l1			; Read until all enries read....
+  	
+dirRead
+	jsr cioClose
+ 	rts
+ 	
+device
+ 	.byte 'D1:*.*'
+ 	
+;
+; Close a CIO Cannel
+;
+cioClose
+	ldx #$20
+	lda #12			; Close
+  	sta iccom,x
+  	jsr ciov   
+  	bmi cioError
+  	rts
+;
+; Prints cio error
+;
+cioError
+ 	jsr print_cio_error
+ 	rts
 ;
 ; Print various status messages
 ; inside the status line
@@ -214,6 +423,16 @@ print_success
 	jsr print
 	jmp out
 	
+print_input_buffer_empty
+	lda #<status
+	sta 88
+	lda #>status
+	sta 89
+	lda #<text_buffer_cleared
+	ldy #>text_buffer_cleared
+	jsr print
+	jmp out
+	
 print_no_input
 	lda #<status
 	sta 88
@@ -237,9 +456,9 @@ print_help
 	jmp out
 	
 print_dir
-	lda #<inBuffer
+	lda zp8
 	sta 88
-	lda #>inBuffer
+	lda zp8+1
 	sta 89
 	
 	lda #<dir
@@ -275,108 +494,7 @@ out
 	sta 89
 	
 	rts
-;
-; Converts float value in 'fro' to ascii
-; Result is written to adress stored in 'zp' ($eo)
-;
-toascii
-	jsr ifp				; Value in 'fro1' and 'fro2' from integer to float
-	jsr fasc			; Float to integer
 	
-	ldy #0		
-num
-  	lda (INBUFF),Y		; Inbuff points to ascii value...
-  	bmi done    		; Copy ascii value to adress 'zp' points to
-  	sta (zp),y
-  	iny
-  	bne num
-done     
- 	clc                            
- 	sbc #127     
-  	sta (zp),y
-  	rts	
-;
-; Prints a string
-;
-; String adr. low A
-; String adr. high Y
-
-print 
-	ldx #0      	; iocb #0
-  	sta icbal,x   
-  	tya           
-  	sta icbah,x   
-  	lda #80       
-  	sta icball,x
-  	lda #0
-  	sta icbalh,x  
-  	lda #9          ; comand 'put text'
-  	sta iccom,x
-  	jsr ciov        ; call cio
-  	rts
-;  
-; Get String (input)
-; 
-; String adr. low A
-; String adr. high Y
-; 
- 
-get 
-	ldx #0      	; iocb #0 
-  	sta icbal,x   
-  	tya           
-  	sta icbah,x   
-  	lda #255      
-  	sta icball,x
-  	lda #0
-  	sta icbalh,x  
-  	lda #4       
-  	sta iccom,x
-  	jsr ciov     
-  	rts
-;
-; Read disk directory
-;
-readDir
-	ldx #$20      	; iocb # x 16 => $20=32=#2 Same as Open #,x,x,"..."
-	lda #<device
-  	sta icbal,x   
-  	lda #>device
-  	sta icbah,x   
-  	lda #3			; Open
-  	sta iccom,x
-  	lda #6			; Read dir
-  	sta icax1,x
-  	jsr ciov   
-  	bmi cioError
-  	
-  	lda #<dir		; Buffer for dir- file
-  	sta icbal,x   
-  	lda #>dir
-  	sta icbah,x  
-l1
-  	ldx #$20	
-  	lda #255		; Max size of dir file....
-  	sta icball,x
-  	lda #3
-  	sta icbalh,x
-	lda #5			; Get record
-  	sta iccom,x
-  	jsr ciov   
-  	bmi dirRead
-  	jsr print_dir
-  	jmp l1			; Read until all enries read....
-  	
-dirRead
- 	rts
- 	
-cioError
- 	jsr print_cio_error
- 	rts
- 	;;; Close!!!!!!!!!!!!
-
-device
- 	.byte 'D1:*.*'
 ;
 ; Firmware
 ;
@@ -389,7 +507,7 @@ null
 	.byte ' ',lf
 
 titel
-	.byte "MINI TERM V1.85 BF                      "
+	.byte "MINI TERM V1.86 BF                      "
 	
 statusTitel
 	.byte "STATUS:                                 "
@@ -397,7 +515,7 @@ statusTitel
 commandLineTitel
 	.byte "SHELL:                                  "
 status
-:160 .byte 
+:120 .byte 0
 
 text_sending
 	.byte 'Sending:'	
@@ -415,11 +533,14 @@ text_success
 text_no_input
 	.byte 'No input, nothing send.....             ',lf
 text_help
-	.byte 'Type: !<help/dir/save/load>.            ',lf
+	.byte 'Type: !D(ir)/C(lear)                    ',lf
 	
 text_cio_error
 	.byte 'CIO Error:'
 	.byte '                              ',lf
+	
+text_buffer_cleared
+	.byte 'In buffer empty                         ',lf
 
 inputbuffer
 :255	.byte 0
@@ -438,8 +559,11 @@ dlist
 	.byte 0
 	.byte $40+$02,a(inBufferTitel)
 	.byte 0
-inbufferAdr
-	.byte $40+$02,a(inBuffer)
+
+	.byte $40+$02 
+inBufferAdr
+	.byte a(inBuffer)
+	
 :16	.byte $02
 	.byte 0
 	.byte $40+$02,a(commandLineTitel)
@@ -452,8 +576,8 @@ commandline
 :120	.byte
 
 dir
-:768	.byte
+:768	.byte 0
 
 inBuffer
-:8000	.byte 
+:9000	.byte 0
 	
