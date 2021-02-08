@@ -6,7 +6,8 @@
 
 	icl 'Atari_Systext_Equates.asm'
 	
-lf	equ $9b		; Linefeed
+lf			equ $9b		; Linefeed
+linesize	equ $28		; Size of one line in bytes 
 
 ;
 ; Main........
@@ -34,7 +35,9 @@ start
 	lda #>inbuffer
 	sta zp8+1
 	lda #0			
-	sta lines
+	sta totalNumberOfLines
+	jsr calcInbufferSize
+	jsr displayInbufferSize
 ;
 ; Handle user input inside the command line
 ;
@@ -88,16 +91,74 @@ cl1
 	bne cl1
 	rts
 ;
-; Add a line to the in- buffer
+; Inbuffer Size
+; Calc free ram. Must be executed first time this program 
+; is started and every time the input buffer is cleared.
+;
+bsize .word 0
+
+calcInbufferSize
+	txa
+	pha
+	tya
+	pha
+	
+	lda #0 
+	sta bsize
+	sta bsize+1
+
+	lda ramtop					; Calc free ram from end of this binary up to ramtop
+	sbc #>endOfPrgStartOfBuffer	; start page at end of this prg
+	sta bsize+1
+	
+	pla
+	tay
+	pla
+	tax	
+	
+	rts	
+;
+; Shows current buffer size
+;	
+displayInbufferSize
+	txa
+	pha
+	tya
+	pha
+	
+	lda bsize
+	sta fro1
+	lda bsize+1
+	sta fro2
+	lda #<(inBufferTitel+24)
+	sta zp
+	lda #>(inBufferTitel+24)
+	sta zp+1
+	jsr toAscii
+	
+	pla
+	tay
+	pla
+	tax	
+	
+	rts
+	
+;
+; Add a lines to the in- buffer
+;
+; linesToEnter contains the number of lines.
 ;
 ; Result: ZP8 points to last empty line in
 ; the in- buffer. Number of lines is increased.
 ;
 ; Every routine writing to the in- buffer must
-; call this subroutine after the last linefeed ($9b) charakter
-; receieved.
+; call this subroutine to adjust the pointer  
+; to the first free line insinde the in- buffer
 ;
-lines	.word 0
+totalNumberOfLines
+	.word 0
+linesToAdd
+	.byte 0
 
 addLine
 	txa
@@ -105,6 +166,8 @@ addLine
 	tya
 	pha
 	
+	ldx linesToAdd
+add
 	clc
 	lda zp8
 	adc#40
@@ -114,15 +177,15 @@ addLine
 	sta zp8+1
 	
 	clc
-	lda lines
+	lda totalNumberOfLines
 	adc #1
-	sta lines
-	lda lines+1
+	sta totalNumberOfLines
+	lda totalNumberOfLines+1
 	adc #0
-	sta lines+1
+	sta totalNumberOfLines+1
 
-	lda lines			; More lines? if so, scroll
-	cmp #10				; screen up by one line....
+	lda totalNumberOfLines		; More lines? if so, scroll
+	cmp #16						; screen up by one line....
 	bcs greater
 	jmp ot	
 greater
@@ -134,6 +197,18 @@ greater
 	adc #0
 	sta inBufferAdr+1
 ot
+	sec						; Refresh input buffer size
+	lda bsize
+	sbc #linesize
+	sta bsize
+	lda bsize+1
+	sbc #0
+	sta bsize+1
+	jsr displayInbufferSize
+	
+	dex
+	bne add
+	
 	pla
 	tay
 	pla
@@ -145,19 +220,25 @@ ot
 ;
 clearInBuffer
 	txa
-	txa
 	pha
 	tya
 	pha
 	
-	lda #<inBuffer			
+	lda #<inbuffer
 	sta zp7
-	sta zp8
-	sta inBufferAdr
 	lda #>inBuffer
 	sta zp7+1
-	sta zp8+1
-	sta inBufferAdr+1
+	ldx #10
+	lda #0
+l	
+	ldy #0
+ll
+	sta (zp7),y
+	iny
+	cpy #255
+	bne ll
+	dex
+	bne l
 		
 	pla
 	tay
@@ -273,6 +354,8 @@ toascii
 	ldy #0		
 num
   	lda (INBUFF),Y		; Inbuff points to ascii value...
+	sec
+	sbc #32				; From atascii to internal (value that can be 'poked' on the screen
   	bmi done    		; Copy ascii value to adress 'zp' points to
   	sta (zp),y
   	iny
@@ -297,7 +380,7 @@ print
   	sta icball,x
   	lda #0
   	sta icbalh,x  
-  	lda #9          ; comand 'put text'
+  	lda #9          ; command 'put text'
   	sta iccom,x
   	jsr ciov        ; call cio
   	rts
@@ -340,6 +423,9 @@ readDir
   	sta icbal,x   
   	lda #>dir
   	sta icbah,x  
+  	
+  	lda #0
+  	sta linesToAdd
 l1
   	ldx #$20	
   	lda #255		; Max size of dir file....
@@ -351,11 +437,12 @@ l1
   	jsr ciov   
   	bmi dirRead
   	jsr print_dir	; Write line just read into the in- buffer
-	jsr addLine
+	inc linesToAdd
   	jmp l1			; Read until all enries read....
   	
 dirRead
 	jsr cioClose
+	jsr addLine
  	rts
  	
 device
@@ -507,7 +594,7 @@ null
 	.byte ' ',lf
 
 titel
-	.byte "MINI TERM V1.86 BF                      "
+	.byte "MINI TERM V1.89 BF                      "
 	
 statusTitel
 	.byte "STATUS:                                 "
@@ -524,7 +611,7 @@ echoOfCommand
 	.byte 0
 	
 inBufferTitel
-	.byte "BUFFER:                                 "	
+	.byte "BUFFER:                       Bytes free"	
 	
 text_time_out_err
 	.byte 'Time out error!                         ',lf
@@ -578,6 +665,12 @@ commandline
 dir
 :768	.byte 0
 
-inBuffer
-:9000	.byte 0
+endOfPrgStartOfBuffer
+		.byte 0
+
+blank
+:700	.byte '.'	; Well, seems some OS routine is using this space?
+
+inBuffer			; All data received is written into this area....
+		.byte 0		
 	

@@ -12,6 +12,10 @@ zp6		equ $ea
 zp7		equ $ec
 zp8		equ $ee
 
+; OS
+
+ramtop	equ $6a
+
 ; ANTIC
 
 DLPTR	EQU 560	
