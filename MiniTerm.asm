@@ -155,6 +155,9 @@ displayInbufferSize
 ; call this subroutine to adjust the pointer  
 ; to the first free line insinde the in- buffer
 ;
+; When the inbuffer is cleared, zp8 has to be reset to 
+; the beginning of the inbuffer....
+;
 totalNumberOfLines
 	.word 0
 linesToAdd
@@ -225,21 +228,33 @@ clearInBuffer
 	pha
 	
 	lda #<inbuffer
-	sta zp7
+	sta zp
 	lda #>inBuffer
-	sta zp7+1
-	ldx #10
+	sta zp+1
+	ldx #>inbuffer			; Number of pages to be cleared
 	lda #0
 l	
 	ldy #0
 ll
-	sta (zp7),y
+	sta (zp),y
 	iny
-	cpy #255
 	bne ll
+	clc
+	inc zp+1
 	dex
 	bne l
 		
+	lda #<inbuffer	 		; Reset pointer to
+	sta zp8					; inpuffer
+	sta inbufferAdr			; and scroll display to the top
+	lda #>inBuffer
+	sta zp8+1
+	sta inBufferAdr+1
+	jsr calcInbufferSize	; Recalc size and
+	jsr displayInBufferSize	; display
+	lda #0					; Reset number of lines
+	sta totalNumberOfLines
+	
 	pla
 	tay
 	pla
@@ -326,6 +341,9 @@ evaluateCommand
 	
 	cmp #'D'
 	bne notDir
+	sta device				; Init device name + # (Dn)....
+	lda inputBuffer+2
+	sta device+1
 	jsr readDir
 	jmp o
 notDir
@@ -446,7 +464,8 @@ dirRead
  	rts
  	
 device
- 	.byte 'D1:*.*'
+	.byte 0,0		; Device and # (D2, D1.....)
+ 	.byte ':*.*'
  	
 ;
 ; Close a CIO Cannel
