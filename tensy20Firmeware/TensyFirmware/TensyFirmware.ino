@@ -3,7 +3,7 @@
  * 
  * This version does only receive data from the Atari.
  * 
- * BF 12/2020
+ * BF 02/2021
  * 
  */
 
@@ -12,7 +12,7 @@
 #define INPUT_BUFFER_SIZE 1024
 int currentInputBufferSize;
 
-SoftwareSerial BT(7,8); 
+SoftwareSerial BT(15,8); 
 
 // Pin assigements for parallel interface
 //
@@ -57,9 +57,13 @@ void setup() {
   //
   // HC05   <->   Tensy
   //  RX          TX (PIN 8)
-  //  TX          RX (Pin 7)
+  //  TX          RX (Pin 15)
+  //
+  // Any pin of the Tensy 2.0 can be used to transmit (tx). Not all pins are compatible 
+  // receive pins. Pin 15 is OK, took me a while to figure this out. 
+  // See: https://www.pjrc.com/teensy/td_libs_NewSoftSerial.html
   pinMode(8, OUTPUT);
-  pinMode(7,INPUT);
+  pinMode(15,INPUT);
   BT.begin(9600);
 
   // Setup parallel interface
@@ -81,6 +85,7 @@ void setup() {
 
   nibble_no=1;
   receieved_nibble=0;
+  currentInputBufferSize=0;
 }
 
 /*
@@ -90,77 +95,90 @@ void loop() {
   
   // Clear input buffer
   char inputBuffer [INPUT_BUFFER_SIZE];
-    currentInputBufferSize=0;
-  
-  //Serial.println("Connection closed");
-  while (digitalRead(END_PIN)==LOW){ // Check if connection was openend
-  
-    //Serial.println("Connection opened.... Waiting for rdy....");
-    
-    rdy_state=digitalRead(RDY_PIN);
-    //dtr_state=digitalRead(DTR_PIN);
+
+  /*
+   * Did we receive something via Bluetooth?
+   */
+   while (BT.available()>0){
+    char r=BT.read();
+    Serial.print(r);
+   }
    
-    // Sending hardware is an 8- Bit 6502 little endian machine.
-    // Bits and nibbles are receieved lsb first 
-    if (rdy_state==LOW && rdy_last_state==HIGH){ // Wait for rising edge, sender tells: Get new nibble...
-
-      Serial.println("RDY received, geting data...");
-
-       // Data
-      pinState_1=digitalRead(IN_BIT_1);
-      pinState_2=digitalRead(IN_BIT_2);
-      pinState_3=digitalRead(IN_BIT_3);
-      pinState_4=digitalRead(IN_BIT_4);
-
-      // Bin to decimal
-      if (pinState_1==LOW)        
-        receieved_nibble=receieved_nibble+1;
-      if (pinState_2==LOW)
-        receieved_nibble=receieved_nibble+2;
-      if (pinState_3==LOW)
-        receieved_nibble=receieved_nibble+4;
-      if (pinState_4==LOW)
-        receieved_nibble=receieved_nibble+8;
-
-      // If first nibble (lsb)=> copy to byte
-      if (nibble_no==1){
-        receieved_byte=receieved_nibble;
-        receieved_nibble=0;
-        nibble_no=2;
-
-        // Tell sender, ok, we have receieved. Send next nibble!
-        digitalWrite(ACKNOWLEDGE,LOW);
-
-        //Serial.println("nibble 1");
-        
-      } else {
-       
-        nibble_no=1;
-        receieved_nibble=receieved_nibble << 4;
-        receieved_byte=receieved_byte | receieved_nibble;
-
-        inputBuffer[currentInputBufferSize]=receieved_byte;
-        if (currentInputBufferSize<INPUT_BUFFER_SIZE) currentInputBufferSize++;
-       
-        receieved_nibble=0;
-        receieved_byte=0;
-
-        // Tell sender, ok, we have receieved. Send next nibble!
-        digitalWrite(ACKNOWLEDGE,LOW);
-        //Serial.println("Nibble 2");
-      }
-    } // Wait for rising edge, sender tells: Get new nibble..
+  /*
+   * Do we receive something from the Atari?
+   */
+   if (!BT.available()){
+    while (digitalRead(END_PIN)==LOW){ // Check if connection was openend
     
-    rdy_last_state=rdy_state; 
+      //Serial.println("Connection opened.... Waiting for rdy....");
+      
+      rdy_state=digitalRead(RDY_PIN);
+      //dtr_state=digitalRead(DTR_PIN);
      
-  } // Check if connection is closed...
+      // Sending hardware is an 8- Bit 6502 little endian machine.
+      // Bits and nibbles are receieved lsb first 
+      if (rdy_state==LOW && rdy_last_state==HIGH){ // Wait for rising edge, sender tells: Get new nibble...
   
-  digitalWrite(ACKNOWLEDGE,HIGH); // Connection was clesed, do not send anything....
+        //Serial.println("RDY received, geting data...");
   
-  // Send receieved buffer contents via bluetooth, if received anything...
- 
-  if (currentInputBufferSize>0){
-    inputBuffer[currentInputBufferSize]='\0';
-    BT.write(inputBuffer);
+         // Data
+        pinState_1=digitalRead(IN_BIT_1);
+        pinState_2=digitalRead(IN_BIT_2);
+        pinState_3=digitalRead(IN_BIT_3);
+        pinState_4=digitalRead(IN_BIT_4);
+  
+        // Bin to decimal
+        if (pinState_1==LOW)        
+          receieved_nibble=receieved_nibble+1;
+        if (pinState_2==LOW)
+          receieved_nibble=receieved_nibble+2;
+        if (pinState_3==LOW)
+          receieved_nibble=receieved_nibble+4;
+        if (pinState_4==LOW)
+          receieved_nibble=receieved_nibble+8;
+  
+        // If first nibble (lsb)=> copy to byte
+        if (nibble_no==1){
+          receieved_byte=receieved_nibble;
+          receieved_nibble=0;
+          nibble_no=2;
+  
+          // Tell sender, ok, we have receieved. Send next nibble!
+          digitalWrite(ACKNOWLEDGE,LOW);
+  
+          //Serial.println("nibble 1");
+          
+        } else {
+         
+          nibble_no=1;
+          receieved_nibble=receieved_nibble << 4;
+          receieved_byte=receieved_byte | receieved_nibble;
+  
+          inputBuffer[currentInputBufferSize]=receieved_byte;
+          if (currentInputBufferSize<INPUT_BUFFER_SIZE) currentInputBufferSize++;
+         
+          receieved_nibble=0;
+          receieved_byte=0;
+  
+          // Tell sender, ok, we have receieved. Send next nibble!
+          digitalWrite(ACKNOWLEDGE,LOW);
+          //Serial.println("Nibble 2");
+        }
+      } // Wait for rising edge, sender tells: Get new nibble..
+      
+      rdy_last_state=rdy_state; 
+       
+    } // Check if connection is closed...
+    
+    digitalWrite(ACKNOWLEDGE,HIGH); // Connection was closed, do not send anything....
+    
+    // Send receieved buffer contents via bluetooth, if received anything...
+   
+    if (currentInputBufferSize>0){
+      inputBuffer[currentInputBufferSize]='\0';
+      BT.write(inputBuffer);
+      currentInputBufferSize=0;
+      BT.flush();
+    }
   }
 }

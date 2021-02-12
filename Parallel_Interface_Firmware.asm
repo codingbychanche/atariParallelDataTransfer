@@ -28,11 +28,10 @@
 
 
 ;
-; Open comunication channel
+; Open comunication channel for output
 ;
 ; Init PIA
 ;
-
 open
 	txa
 	pha
@@ -56,9 +55,8 @@ open
 	rts
 	
 ;	
-; Close 
-;
-		
+; Close output channel
+;		
 close
 	txa
 	pha
@@ -87,7 +85,6 @@ close
 	tax
 			
 	rts
-	
 ;
 ; Send one byte
 ;
@@ -196,11 +193,9 @@ time_out_error
 	
 	sec 				; Set carry to indicate error!
 	rts
-	
 ;
 ; Clear low nibble of Port A
 ;
-
 clearlow
 	lda porta			; Clear low nibble
 	lsr
